@@ -223,6 +223,12 @@ def check_featurizer_matches_model(data_loader, model):
     v1_atom_fdims = []
 
     for dataset, mp in zip(datasets, mps):
+        if not hasattr(mp, "W_i"):
+            logger.info(
+                "Skipping featurizer-dimension compatibility check for non-graph message passing."
+            )
+            return data_loader
+
         featurizer = dataset.featurizer
         atom_fdim = featurizer.atom_fdim
         bond_fdim = featurizer.bond_fdim

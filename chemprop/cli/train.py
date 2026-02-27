@@ -62,6 +62,7 @@ from chemprop.nn.ffn import ConstrainerFFN
 from chemprop.nn.message_passing import (
     AtomMessagePassing,
     BondMessagePassing,
+    DescriptorOnlyMessagePassing,
     MABAtomMessagePassing,
     MABBondMessagePassing,
     MulticomponentMessagePassing,
@@ -299,6 +300,14 @@ def add_train_args(parser: ArgumentParser) -> ArgumentParser:
     extra_mpnn_args = parser.add_argument_group("extra MPNN args")
     extra_mpnn_args.add_argument(
         "--batch-norm", action="store_true", help="Turn on batch normalization after aggregation"
+    )
+    extra_mpnn_args.add_argument(
+        "--descriptor-only",
+        action="store_true",
+        help=(
+            "Replace graph message passing with descriptor-only featurization and use the FFN on "
+            "descriptor inputs (X_d) only."
+        ),
     )
     extra_mpnn_args.add_argument(
         "--multiclass-num-classes",
@@ -712,6 +721,29 @@ def validate_train_args(args):
         raise ArgumentError(
             argument=None, message="Class balance is only applicable for classification tasks."
         )
+
+    if args.descriptor_only:
+        if args.from_foundation is not None:
+            raise ArgumentError(
+                argument=None,
+                message="`--descriptor-only` cannot be combined with `--from-foundation`.",
+            )
+        if args.checkpoint is not None or args.model_frzn is not None:
+            raise ArgumentError(
+                argument=None,
+                message="`--descriptor-only` cannot be combined with `--checkpoint` or `--model-frzn`.",
+            )
+        has_descriptors = any(
+            x is not None for x in (args.molecule_featurizers, args.descriptors_path, args.descriptors_columns)
+        )
+        if not has_descriptors:
+            raise ArgumentError(
+                argument=None,
+                message=(
+                    "`--descriptor-only` requires descriptor inputs. Provide at least one of "
+                    "`--molecule-featurizers`, `--descriptors-path`, or `--descriptors-columns`."
+                ),
+            )
 
     valid_tracking_metrics = (
         args.metrics or [PredictorRegistry[args.task_type]._T_default_metric.alias]
@@ -1321,7 +1353,27 @@ def build_model(
         n_tasks = train_dset.Y.shape[1]
         mpnn_cls = MPNN
 
-    if args.from_foundation is not None:
+    if args.descriptor_only:
+        if is_multi:
+            mp_blocks = [
+                DescriptorOnlyMessagePassing(
+                    output_dim=0,
+                    V_d_transform=V_d_transforms[i],
+                    graph_transform=graph_transforms[i],
+                )
+                for i in range(train_dset.n_components)
+            ]
+            mp_block = MulticomponentMessagePassing(
+                mp_blocks, train_dset.n_components, args.mpn_shared
+            )
+        else:
+            mp_block = DescriptorOnlyMessagePassing(
+                output_dim=0,
+                V_d_transform=V_d_transforms[0],
+                graph_transform=graph_transforms[0],
+            )
+        agg = Factory.build(AggregationRegistry["mean"])
+    elif args.from_foundation is not None:
         if Path(args.from_foundation).exists():  # local model
             if is_multi:
                 mp_blocks = []
@@ -1472,11 +1524,15 @@ def build_model(
             f"No loss function was specified! Using class default: {predictor_cls._T_default_criterion}"
         )
 
+    batch_norm = args.batch_norm and mp_block.output_dim > 0
+    if args.batch_norm and mp_block.output_dim == 0:
+        logger.warning("Ignoring `--batch-norm` for descriptor-only models (no graph embedding).")
+
     return mpnn_cls(
         mp_block,
         agg,
         predictor,
-        args.batch_norm,
+        batch_norm,
         metrics,
         args.warmup_epochs,
         args.init_lr,

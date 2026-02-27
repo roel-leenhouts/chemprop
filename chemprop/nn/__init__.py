@@ -62,6 +62,7 @@ from .predictors import (
 )
 from .transforms import GraphTransform, ScaleTransform, UnscaleTransform
 from .utils import Activation
+from .xgboost import XGBoostConfig, XGBoostRegressor
 
 __all__ = [
     "Aggregation",
@@ -132,4 +133,6 @@ __all__ = [
     "GraphTransform",
     "ScaleTransform",
     "UnscaleTransform",
+    "XGBoostConfig",
+    "XGBoostRegressor",
 ]
