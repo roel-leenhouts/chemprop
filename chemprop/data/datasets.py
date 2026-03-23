@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from functools import cached_property
 import logging
-from typing import NamedTuple, TypeAlias
+from typing import Any, NamedTuple, TypeAlias
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -17,14 +17,13 @@ from chemprop.data.datapoints import (
     ReactionDatapoint,
 )
 from chemprop.data.molgraph import MolGraph
-from chemprop.featurizers.base import Featurizer
-from chemprop.featurizers.molgraph import (
+from chemprop.featurizers.molgraph.cache import MolGraphCache, MolGraphCacheOnTheFly
+from chemprop.featurizers.molgraph.molecule import (
     BatchCuikMolGraph,
-    CGRFeaturizer,
     CuikmolmakerMolGraphFeaturizer,
     SimpleMoleculeMolGraphFeaturizer,
 )
-from chemprop.featurizers.molgraph.cache import MolGraphCache, MolGraphCacheOnTheFly
+from chemprop.featurizers.molgraph.reaction import CGRFeaturizer
 from chemprop.types import Rxn
 
 logger = logging.getLogger(__name__)
@@ -207,7 +206,7 @@ class MoleculeDataset(_MolGraphDatasetMixin, MolGraphDataset):
     """
 
     data: list[MoleculeDatapoint]
-    featurizer: Featurizer[Mol, MolGraph] = field(default_factory=SimpleMoleculeMolGraphFeaturizer)
+    featurizer: Any = field(default_factory=SimpleMoleculeMolGraphFeaturizer)
     n_workers: int = 0
 
     def __post_init__(self):
@@ -649,7 +648,7 @@ class ReactionDataset(_MolGraphDatasetMixin, MolGraphDataset):
 
     data: list[ReactionDatapoint]
     """the dataset from which to load"""
-    featurizer: Featurizer[Rxn, MolGraph] = field(default_factory=CGRFeaturizer)
+    featurizer: Any = field(default_factory=CGRFeaturizer)
     """the featurizer with which to generate MolGraphs of the input"""
     n_workers: int = 0
     """number of workers to use for cache calculation"""

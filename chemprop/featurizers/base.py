@@ -1,10 +1,13 @@
 from abc import abstractmethod
 from collections.abc import Sized
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 import numpy as np
 
-from chemprop.data.molgraph import MolGraph
+if TYPE_CHECKING:
+    from chemprop.data.molgraph import MolGraph
+else:
+    MolGraph = Any
 
 S = TypeVar("S")
 T = TypeVar("T")

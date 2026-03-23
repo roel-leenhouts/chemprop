@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import os
+from collections import OrderedDict
+from functools import lru_cache
 from pathlib import Path
+from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -105,70 +110,277 @@ def _override_fraction_columns(
     return df
 
 
+class _MemoryAwareLRUCache:
+    def __init__(self, max_bytes: int):
+        self.max_bytes = max(0, int(max_bytes))
+        self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        self._bytes = 0
+
+    def get(self, key: str) -> np.ndarray | None:
+        val = self._cache.get(key)
+        if val is None:
+            return None
+        self._cache.move_to_end(key)
+        return val
+
+    def set(self, key: str, value: np.ndarray):
+        value = np.asarray(value, dtype=np.float32)
+        if key in self._cache:
+            old = self._cache.pop(key)
+            self._bytes -= int(old.nbytes)
+        size = int(value.nbytes)
+        self._cache[key] = value
+        self._cache.move_to_end(key)
+        self._bytes += size
+        while self.max_bytes > 0 and self._bytes > self.max_bytes and len(self._cache) > 0:
+            _, ev = self._cache.popitem(last=False)
+            self._bytes -= int(ev.nbytes)
+
+
+class _MolT5Embedder:
+    def __init__(self):
+        from transformers import AutoTokenizer, T5EncoderModel
+
+        model_name = os.getenv("CHEMPROPMIX_MOLT5_MODEL", "laituan245/molt5-base")
+        self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self._model = T5EncoderModel.from_pretrained(model_name)
+        self._model.eval()
+
+    def encode(self, smiles: str) -> np.ndarray:
+        import torch
+
+        with torch.no_grad():
+            toks = self._tokenizer(smiles, return_tensors="pt", truncation=True, max_length=256)
+            out = self._model(**toks).last_hidden_state  # (1, T, H)
+            mask = toks["attention_mask"].unsqueeze(-1)  # (1, T, 1)
+            summed = (out * mask).sum(dim=1)
+            denom = mask.sum(dim=1).clamp(min=1)
+            pooled = summed / denom
+            return pooled.squeeze(0).cpu().numpy().astype(np.float32, copy=False)
+
+
+def _sha1_key(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+
+@lru_cache(maxsize=4)
+def _get_descriptor_encoder(name: str) -> tuple[Callable[[str], np.ndarray], int]:
+    key = str(name).strip().lower()
+    if key in {"rdkit2d", "rdkit2dnormalized"}:
+        from molfeat.trans import MoleculeTransformer
+
+        trans = MoleculeTransformer(featurizer="desc2d", n_jobs=1, verbose=False)
+        probe = np.asarray(trans([Chem.MolFromSmiles("C")])[0], dtype=np.float32).reshape(-1)
+
+        def _enc(smiles: str) -> np.ndarray:
+            arr = np.asarray(trans([Chem.MolFromSmiles(smiles)])[0], dtype=np.float32).reshape(-1)
+            return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return _enc, int(probe.shape[0])
+
+    if key == "molt5":
+        emb = _MolT5Embedder()
+        probe = emb.encode("C")
+
+        def _enc(smiles: str) -> np.ndarray:
+            arr = emb.encode(smiles)
+            return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return _enc, int(probe.shape[0])
+
+    raise ValueError(
+        f"Unsupported descriptor_featurizer={name!r}; expected one of "
+        "'rdkit2d', 'rdkit2dnormalized', 'molt5'."
+    )
+
+
 def build_descriptor_matrix(
     df_mix: pd.DataFrame,
     descriptor_featurizer: str = "rdkit2dnormalized",
-    include_fraction_features: bool = True,
-    component_combine: str = "concat",
+    component_combine: str = "weighted_sum",
 ) -> np.ndarray:
-    # Lazy import so metric helpers in this module stay usable without full Chemprop import stack.
-    from chemprop.featurizers.molecule import MoleculeFeaturizerRegistry
-
     comp_cols, frac_cols = gather_component_columns(df_mix)
     if component_combine not in {"concat", "weighted_sum"}:
         raise ValueError(f"Unsupported component_combine={component_combine!r}; expected 'concat' or 'weighted_sum'.")
-    featurizer = MoleculeFeaturizerRegistry[descriptor_featurizer]()
-    d_desc = len(featurizer)
-    d_frac = len(frac_cols) if include_fraction_features else 0
+    encode_desc, d_desc = _get_descriptor_encoder(descriptor_featurizer)
+    use_explicit_solute = "solute_inchi" in df_mix.columns
     d_components = len(comp_cols) * d_desc if component_combine == "concat" else d_desc
-    X = np.zeros((len(df_mix), d_components + d_frac), dtype=float)
+    x_dim = 2 * d_desc if use_explicit_solute else d_components
+    X = np.zeros((len(df_mix), x_dim), dtype=float)
     zero_desc = np.zeros(d_desc, dtype=float)
-    desc_cache: dict[str, np.ndarray] = {}
+    cache_max_mb = float(os.getenv("CHEMPROPMIX_EMB_CACHE_MAX_MB", "512"))
+    desc_cache = _MemoryAwareLRUCache(max_bytes=int(cache_max_mb * 1024 * 1024))
+    disk_cache_dir = os.getenv("CHEMPROPMIX_EMB_CACHE_DIR", "/tmp/chempropmix_emb_cache")
+    use_disk_cache = str(os.getenv("CHEMPROPMIX_EMB_CACHE_DISABLE_DISK", "0")).strip() not in {"1", "true", "True"}
+    if use_disk_cache:
+        Path(disk_cache_dir).mkdir(parents=True, exist_ok=True)
+
+    def _descriptor_for_inchi(inchi: str | None) -> np.ndarray:
+        if inchi is None:
+            return zero_desc
+        cached = desc_cache.get(inchi)
+        if cached is not None:
+            return cached
+
+        smi = inchi_to_smiles(inchi)
+        if smi is None:
+            desc = zero_desc
+        else:
+            disk_hit = None
+            if use_disk_cache:
+                disk_path = Path(disk_cache_dir) / f"{_sha1_key(smi)}.npy"
+                if disk_path.exists():
+                    try:
+                        disk_hit = np.load(disk_path).astype(np.float32, copy=False)
+                    except Exception:
+                        disk_hit = None
+            if disk_hit is not None and disk_hit.shape[0] == d_desc:
+                desc = disk_hit
+            else:
+                mol = Chem.MolFromSmiles(smi)
+                if mol is None:
+                    desc = zero_desc
+                else:
+                    desc = encode_desc(smi)
+                    if desc.shape[0] != d_desc:
+                        raise ValueError(
+                            f"Descriptor size drifted for featurizer={descriptor_featurizer!r}: "
+                            f"expected {d_desc}, got {desc.shape[0]}"
+                        )
+                    if use_disk_cache:
+                        np.save(disk_path, desc)
+
+        desc_cache.set(inchi, desc)
+        return desc
 
     for row_idx, row in enumerate(df_mix.itertuples(index=False)):
         row_dict = row._asdict()
+        solute_inchi = row_dict.get("solute_inchi") if use_explicit_solute else None
+        solute_key = None if pd.isna(solute_inchi) else str(solute_inchi)
+        solute_desc = _descriptor_for_inchi(solute_key)
+
         feats = []
         fracs = []
         for comp_col, frac_col in zip(comp_cols, frac_cols):
             frac_val = pd.to_numeric(row_dict.get(frac_col), errors="coerce")
             frac = 0.0 if pd.isna(frac_val) else float(frac_val)
-            fracs.append(frac)
             inchi = row_dict.get(comp_col)
 
             if pd.isna(inchi) or frac <= 0.0:
-                feats.append(zero_desc)
+                if component_combine == "concat":
+                    feats.append(zero_desc)
                 continue
 
             key = str(inchi)
-            if key not in desc_cache:
-                smi = inchi_to_smiles(key)
-                if smi is None:
-                    desc_cache[key] = zero_desc
-                else:
-                    mol = Chem.MolFromSmiles(smi)
-                    if mol is None:
-                        desc_cache[key] = zero_desc
-                    else:
-                        d = np.array(featurizer(mol), dtype=float)
-                        d = np.nan_to_num(d, nan=0.0, posinf=0.0, neginf=0.0)
-                        desc_cache[key] = d
-            feats.append(desc_cache[key])
+            if solute_key is not None and key == solute_key:
+                if component_combine == "concat":
+                    feats.append(zero_desc)
+                continue
+
+            feats.append(_descriptor_for_inchi(key))
+            fracs.append(frac)
 
         if component_combine == "concat":
             row_feat = np.concatenate(feats, axis=0) if feats else np.zeros(0, dtype=float)
         else:
-            # Fraction-weighted sum over component descriptor vectors.
+            # Fraction-weighted sum over solvent descriptor vectors.
             if feats:
                 feat_mat = np.stack(feats, axis=0)
                 frac_vec = np.array(fracs, dtype=float).reshape(-1, 1)
                 row_feat = (feat_mat * frac_vec).sum(axis=0)
             else:
                 row_feat = np.zeros(d_desc, dtype=float)
-        if include_fraction_features:
-            row_feat = np.concatenate([row_feat, np.array(fracs, dtype=float)], axis=0)
-        X[row_idx] = row_feat
+
+        if use_explicit_solute:
+            X[row_idx] = np.concatenate([solute_desc, row_feat], axis=0)
+        else:
+            X[row_idx] = row_feat
 
     return X
+
+
+def build_descriptor_components(
+    df_mix: pd.DataFrame,
+    descriptor_featurizer: str = "rdkit2dnormalized",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, bool]:
+    comp_cols, frac_cols = gather_component_columns(df_mix)
+    encode_desc, d_desc = _get_descriptor_encoder(descriptor_featurizer)
+    use_explicit_solute = "solute_inchi" in df_mix.columns
+    n_rows = len(df_mix)
+    n_components = len(comp_cols)
+    zero_desc = np.zeros(d_desc, dtype=float)
+
+    solute_descs = np.zeros((n_rows, d_desc), dtype=float)
+    component_descs = np.zeros((n_rows, n_components, d_desc), dtype=float)
+    component_fracs = np.zeros((n_rows, n_components), dtype=float)
+    component_mask = np.zeros((n_rows, n_components), dtype=bool)
+
+    cache_max_mb = float(os.getenv("CHEMPROPMIX_EMB_CACHE_MAX_MB", "512"))
+    desc_cache = _MemoryAwareLRUCache(max_bytes=int(cache_max_mb * 1024 * 1024))
+    disk_cache_dir = os.getenv("CHEMPROPMIX_EMB_CACHE_DIR", "/tmp/chempropmix_emb_cache")
+    use_disk_cache = str(os.getenv("CHEMPROPMIX_EMB_CACHE_DISABLE_DISK", "0")).strip() not in {"1", "true", "True"}
+    if use_disk_cache:
+        Path(disk_cache_dir).mkdir(parents=True, exist_ok=True)
+
+    def _descriptor_for_inchi(inchi: str | None) -> np.ndarray:
+        if inchi is None:
+            return zero_desc
+        cached = desc_cache.get(inchi)
+        if cached is not None:
+            return cached
+
+        smi = inchi_to_smiles(inchi)
+        if smi is None:
+            desc = zero_desc
+        else:
+            disk_hit = None
+            if use_disk_cache:
+                disk_path = Path(disk_cache_dir) / f"{_sha1_key(smi)}.npy"
+                if disk_path.exists():
+                    try:
+                        disk_hit = np.load(disk_path).astype(np.float32, copy=False)
+                    except Exception:
+                        disk_hit = None
+            if disk_hit is not None and disk_hit.shape[0] == d_desc:
+                desc = disk_hit
+            else:
+                mol = Chem.MolFromSmiles(smi)
+                if mol is None:
+                    desc = zero_desc
+                else:
+                    desc = encode_desc(smi)
+                    if desc.shape[0] != d_desc:
+                        raise ValueError(
+                            f"Descriptor size drifted for featurizer={descriptor_featurizer!r}: "
+                            f"expected {d_desc}, got {desc.shape[0]}"
+                        )
+                    if use_disk_cache:
+                        np.save(disk_path, desc)
+
+        desc_cache.set(inchi, desc)
+        return desc
+
+    for row_idx, row in enumerate(df_mix.itertuples(index=False)):
+        row_dict = row._asdict()
+        solute_inchi = row_dict.get("solute_inchi") if use_explicit_solute else None
+        solute_key = None if pd.isna(solute_inchi) else str(solute_inchi)
+        if solute_key is not None:
+            solute_descs[row_idx] = _descriptor_for_inchi(solute_key)
+
+        for comp_idx, (comp_col, frac_col) in enumerate(zip(comp_cols, frac_cols)):
+            frac_val = pd.to_numeric(row_dict.get(frac_col), errors="coerce")
+            frac = 0.0 if pd.isna(frac_val) else float(frac_val)
+            inchi = row_dict.get(comp_col)
+            if pd.isna(inchi) or frac <= 0.0:
+                continue
+            key = str(inchi)
+            if solute_key is not None and key == solute_key:
+                continue
+            component_descs[row_idx, comp_idx] = _descriptor_for_inchi(key)
+            component_fracs[row_idx, comp_idx] = frac
+            component_mask[row_idx, comp_idx] = True
+
+    return solute_descs, component_descs, component_fracs, component_mask, use_explicit_solute
 
 
 def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
@@ -282,21 +494,12 @@ def load_split_dataframes(
 
     # Keep training robust for folds with empty validation by carving from train only.
     if len(val_df) == 0 and len(train_df) > 1:
-        rng = np.random.default_rng(seed)
-        n_val = max(1, int(round(0.1 * len(train_df))))
-        n_val = min(n_val, len(train_df) - 1)
-        picked = sorted(rng.choice(np.arange(len(train_df)), size=n_val, replace=False).tolist())
-        val_df = train_df.iloc[picked].copy().reset_index(drop=True)
-        keep = np.ones(len(train_df), dtype=bool)
-        keep[picked] = False
-        train_df = train_df.iloc[keep].copy().reset_index(drop=True)
-        print(f"[split-fallback] Validation split was empty; moved {len(val_df)} training rows to val.")
+        raise ValueError(f"No validation rows available in split file: {split_csv}")
 
     if len(train_df) == 0:
         raise ValueError(f"No training rows available in split file: {split_csv}")
     if len(test_df) == 0:
         raise ValueError(f"No test rows available in split file: {split_csv}")
-
     return train_df, val_df, test_df
 
 

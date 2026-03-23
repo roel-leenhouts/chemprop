@@ -18,6 +18,22 @@ class XGBoostConfig:
     random_state: int = 0
 
 
+@dataclass
+class XGBoostScaler:
+    y_mean: float
+    y_std: float
+    x_mean: np.ndarray
+    x_std: np.ndarray
+
+    def to_metadata(self) -> dict[str, object]:
+        return {
+            "y_mean": float(self.y_mean),
+            "y_std": float(self.y_std),
+            "x_mean": np.asarray(self.x_mean, dtype=float).tolist(),
+            "x_std": np.asarray(self.x_std, dtype=float).tolist(),
+        }
+
+
 class XGBoostRegressor:
     """Thin wrapper around xgboost.XGBRegressor for descriptor-head training."""
 
@@ -79,14 +95,23 @@ class XGBoostRegressor:
         path: str | Path,
         *,
         descriptor_featurizer: str,
-        scaler: dict[str, object],
+        scaler: XGBoostScaler | dict[str, object],
+        aggregation: str | None = None,
+        interaction_type: str | None = None,
     ) -> None:
+        if isinstance(scaler, XGBoostScaler):
+            scaler_payload = scaler.to_metadata()
+        else:
+            scaler_payload = dict(scaler)
         payload = {
             "descriptor_only": True,
             "predictor_head": "xgboost",
             "descriptor_featurizer": descriptor_featurizer,
-            "scaler": scaler,
+            "scaler": scaler_payload,
             "xgboost_params": self.model.get_params(),
         }
+        if aggregation is not None:
+            payload["aggregation"] = aggregation
+        if interaction_type is not None:
+            payload["interaction_type"] = interaction_type
         Path(path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
-

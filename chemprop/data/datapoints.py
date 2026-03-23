@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Callable
 
 import numpy as np
 from rdkit.Chem import AllChem as Chem
 
-from chemprop.featurizers import Featurizer
 from chemprop.utils import make_mol
 
-MoleculeFeaturizer = Featurizer[Chem.Mol, np.ndarray]
+MoleculeFeaturizer = Callable[[Chem.Mol], np.ndarray]
 
 
 @dataclass(slots=True)
