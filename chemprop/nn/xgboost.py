@@ -98,6 +98,9 @@ class XGBoostRegressor:
         scaler: XGBoostScaler | dict[str, object],
         aggregation: str | None = None,
         interaction_type: str | None = None,
+        temperature_mode: str | None = None,
+        temperature_transform: str | None = None,
+        temperature_physics_law: str | None = None,
     ) -> None:
         if isinstance(scaler, XGBoostScaler):
             scaler_payload = scaler.to_metadata()
@@ -114,4 +117,10 @@ class XGBoostRegressor:
             payload["aggregation"] = aggregation
         if interaction_type is not None:
             payload["interaction_type"] = interaction_type
+        if temperature_mode is not None:
+            payload["temperature_mode"] = temperature_mode
+        if temperature_transform is not None:
+            payload["temperature_transform"] = temperature_transform
+        if temperature_physics_law is not None:
+            payload["temperature_physics_law"] = temperature_physics_law
         Path(path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
