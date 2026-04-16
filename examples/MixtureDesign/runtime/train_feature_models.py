@@ -11,7 +11,7 @@ def _load_scripts_training_module():
         / "scripts_training"
         / "train_feature_models.py"
     )
-    spec = importlib.util.spec_from_file_location("chempropmix_scripts_train_feature_models", module_path)
+    spec = importlib.util.spec_from_file_location("project_workspace_scripts_train_feature_models", module_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load scripts_training feature-model implementation from {module_path}")
     module = importlib.util.module_from_spec(spec)

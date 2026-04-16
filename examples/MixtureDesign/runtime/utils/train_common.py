@@ -141,7 +141,7 @@ class _MolT5Embedder:
     def __init__(self):
         from transformers import AutoTokenizer, T5EncoderModel
 
-        model_name = os.getenv("CHEMPROPMIX_MOLT5_MODEL", "laituan245/molt5-base")
+        model_name = os.getenv("PROJECT_MOLT5_MODEL", "laituan245/molt5-base")
         self._tokenizer = AutoTokenizer.from_pretrained(model_name)
         self._model = T5EncoderModel.from_pretrained(model_name)
         self._model.eval()
@@ -208,10 +208,10 @@ def build_descriptor_matrix(
     x_dim = 2 * d_desc if use_explicit_solute else d_components
     X = np.zeros((len(df_mix), x_dim), dtype=float)
     zero_desc = np.zeros(d_desc, dtype=float)
-    cache_max_mb = float(os.getenv("CHEMPROPMIX_EMB_CACHE_MAX_MB", "512"))
+    cache_max_mb = float(os.getenv("MIXTURE_REPO_EMB_CACHE_MAX_MB", "512"))
     desc_cache = _MemoryAwareLRUCache(max_bytes=int(cache_max_mb * 1024 * 1024))
-    disk_cache_dir = os.getenv("CHEMPROPMIX_EMB_CACHE_DIR", "/tmp/chempropmix_emb_cache")
-    use_disk_cache = str(os.getenv("CHEMPROPMIX_EMB_CACHE_DISABLE_DISK", "0")).strip() not in {"1", "true", "True"}
+    disk_cache_dir = os.getenv("MIXTURE_REPO_EMB_CACHE_DIR", "/tmp/project_workspace_emb_cache")
+    use_disk_cache = str(os.getenv("MIXTURE_REPO_EMB_CACHE_DISABLE_DISK", "0")).strip() not in {"1", "true", "True"}
     if use_disk_cache:
         Path(disk_cache_dir).mkdir(parents=True, exist_ok=True)
 
@@ -315,10 +315,10 @@ def build_descriptor_components(
     component_fracs = np.zeros((n_rows, n_components), dtype=float)
     component_mask = np.zeros((n_rows, n_components), dtype=bool)
 
-    cache_max_mb = float(os.getenv("CHEMPROPMIX_EMB_CACHE_MAX_MB", "512"))
+    cache_max_mb = float(os.getenv("MIXTURE_REPO_EMB_CACHE_MAX_MB", "512"))
     desc_cache = _MemoryAwareLRUCache(max_bytes=int(cache_max_mb * 1024 * 1024))
-    disk_cache_dir = os.getenv("CHEMPROPMIX_EMB_CACHE_DIR", "/tmp/chempropmix_emb_cache")
-    use_disk_cache = str(os.getenv("CHEMPROPMIX_EMB_CACHE_DISABLE_DISK", "0")).strip() not in {"1", "true", "True"}
+    disk_cache_dir = os.getenv("MIXTURE_REPO_EMB_CACHE_DIR", "/tmp/project_workspace_emb_cache")
+    use_disk_cache = str(os.getenv("MIXTURE_REPO_EMB_CACHE_DISABLE_DISK", "0")).strip() not in {"1", "true", "True"}
     if use_disk_cache:
         Path(disk_cache_dir).mkdir(parents=True, exist_ok=True)
 

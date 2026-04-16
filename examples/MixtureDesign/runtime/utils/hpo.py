@@ -183,7 +183,7 @@ def require_ray_tune():
         from ray.tune.schedulers import ASHAScheduler
     except Exception as exc:  # pragma: no cover - depends on optional runtime dependency
         raise RuntimeError(
-            "Hyperparameter optimization requires Ray Tune. Install it in ChempropDev with "
+            "Hyperparameter optimization requires Ray Tune. Install it in the active project environment with "
             "`pip install 'ray[tune]'` and rerun with `--hpo`."
         ) from exc
     return ray, tune, ASHAScheduler
