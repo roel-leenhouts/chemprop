@@ -1,7 +1,7 @@
 # required to make the tarball distrbution ignore unnecessary files
 include pyproject.toml
 include README.md
-recursive-include chemprop *
+recursive-include model_core *
 global-exclude *.pyc
 global-exclude __pycache__/
 prune tests

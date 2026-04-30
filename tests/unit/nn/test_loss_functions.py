@@ -1,4 +1,4 @@
-"""Chemprop unit tests for chemprop/models/loss.py"""
+"""Unit tests for the loss-function module."""
 
 import numpy as np
 import pytest

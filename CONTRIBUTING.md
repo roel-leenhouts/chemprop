@@ -19,7 +19,7 @@ describes how to merge code changes into this repository.
   [branch](https://help.github.com/articles/creating-and-deleting-branches-within-your-repository/)
   with the branch name relating to the feature you are going to add.
 * When you are ready for others to examine and comment on your new feature,
-  navigate to your fork of `chemprop` on GitHub and open a [pull
+  navigate to your fork of this repository on GitHub and open a [pull
   request](https://help.github.com/articles/using-pull-requests/) (PR). Note that
   after you launch a PR from one of your fork's branches, all
   subsequent commits to that branch will be added to the open pull request
@@ -29,7 +29,7 @@ describes how to merge code changes into this repository.
 * If you're providing a new feature, you **must** add test cases and documentation.
 * When the code is ready to go, run the test suite: `pytest`.
 * When you're ready to be considered for merging, click the "Ready for review"
-  box on the PR page to let the Chemprop devs know that the changes are complete.
+  box on the PR page to let the maintainers know that the changes are complete.
   The code will not be merged until the continuous integration returns checkmarks,
   and at least one core developer gives "Approved" reviews.
 
