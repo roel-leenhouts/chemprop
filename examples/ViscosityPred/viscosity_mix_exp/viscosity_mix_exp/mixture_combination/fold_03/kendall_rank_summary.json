@@ -1,0 +1,11 @@
+{
+  "predictions_csv": "scripts/scripts_training/outputs_hpc/default_hparam_matrices/matrix1/mixture_combination/gnn/viscosity_mix_exp/viscosity_mix_exp/mixture_combination/fold_03/predictions.csv",
+  "excess_analysis_csv": "scripts/scripts_training/outputs_hpc/default_hparam_matrices/matrix1/mixture_combination/gnn/viscosity_mix_exp/viscosity_mix_exp/mixture_combination/fold_03/excess_analysis.csv",
+  "n_test_rows": 7188,
+  "absolute_kendall_model_vs_true": 0.8930090250523078,
+  "n_rows_with_reference_ideal": 6777,
+  "absolute_kendall_ideal_vs_true": 0.8250424928974394,
+  "absolute_kendall_model_vs_ideal": 0.8416747350824714,
+  "n_rows_with_reference_excess": 6777,
+  "excess_kendall_model_vs_reference": 0.5600039128578498
+}
