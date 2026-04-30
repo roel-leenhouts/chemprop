@@ -37,7 +37,7 @@ def get_activation_function(activation: str | nn.Module | Activation) -> nn.Modu
     if isinstance(activation, nn.Module):
         if isinstance(activation, nn.modules.activation.SELU):
             logger.warning(
-                "Chemprop does not support self-normalization. Using SELU activation is not enough to achieve it."
+                "This model stack does not support self-normalization. Using SELU activation is not enough to achieve it."
             )
         return activation
     match Activation.get(activation):

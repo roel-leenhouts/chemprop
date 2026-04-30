@@ -1,14 +1,14 @@
 # requirements
 
-This directory contains static lists of _known working_ external dependencies for historical versions of `chemprop`.
+This directory contains static lists of _known working_ external dependencies for historical upstream releases.
 
 ## Usage
 
-You can install any version of `chemprop` by simply running `pip install -r X.Y.Z_requirements.txt`.
+You can recreate the dependency set for a tagged upstream release by running `pip install -r X.Y.Z_requirements.txt`.
 
-Note that you can also run `pip install chemprop==X.Y.Z` to get that installed version - this will install more recent versions of the external dependencies (which will probably be more correct and fast) but may have backwards compatibility issues.
+Installing the published upstream package directly may resolve to newer external dependencies, which can introduce backward-compatibility differences relative to these pinned snapshots.
 
 ## Updating
 
 Run `. get_requirements.sh` with Docker installed and running and all of the requirements files will be re-generated.
-This only needs to be done whenever a new tagged release of `chemprop` is created and manually pushed to Docker.
+This only needs to be done whenever a new tagged upstream release is created and published to Docker.

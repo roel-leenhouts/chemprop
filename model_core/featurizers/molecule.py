@@ -57,7 +57,7 @@ class RDKit2DFeaturizer(VectorFeaturizer[Mol]):
             logger.warning(
                 "The RDKit 2D features can deviate signifcantly from a normal distribution. Consider "
                 "manually scaling them using an appropriate scaler before creating datapoints, rather "
-                "than using the scikit-learn `StandardScaler` (the default in Chemprop)."
+                "than using the scikit-learn `StandardScaler` default."
             )
 
     def __len__(self) -> int:

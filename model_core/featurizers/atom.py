@@ -124,7 +124,7 @@ class MultiHotAtomFeaturizer(VectorFeaturizer[Atom]):
 
     @classmethod
     def v1(cls, max_atomic_num: int = 100):
-        """The original implementation used in Chemprop V1 [1]_, [2]_.
+        """The original v1 implementation [1]_.
 
         Parameters
         ----------
@@ -136,9 +136,6 @@ class MultiHotAtomFeaturizer(VectorFeaturizer[Atom]):
         .. [1] Yang, K.; Swanson, K.; Jin, W.; Coley, C.; Eiden, P.; Gao, H.; Guzman-Perez, A.; Hopper, T.;
             Kelley, B.; Mathea, M.; Palmer, A. "Analyzing Learned Molecular Representations for Property Prediction."
             J. Chem. Inf. Model. 2019, 59 (8), 3370–3388. https://doi.org/10.1021/acs.jcim.9b00237
-        .. [2] Heid, E.; Greenman, K.P.; Chung, Y.; Li, S.C.; Graff, D.E.; Vermeire, F.H.; Wu, H.; Green, W.H.; McGill,
-            C.J. "Chemprop: A machine learning package for chemical property prediction." J. Chem. Inf. Model. 2024,
-            64 (1), 9–17. https://doi.org/10.1021/acs.jcim.3c01250
         """
 
         return cls(

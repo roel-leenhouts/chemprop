@@ -1,4 +1,4 @@
-"""This integration test is designed to ensure that the chemprop model can _overfit_ the training
+"""This integration test is designed to ensure that the model can _overfit_ the training
 data. A small enough dataset should be memorizable by even a moderately sized model, so this test
 should generally pass."""
 

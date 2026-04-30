@@ -46,7 +46,7 @@ def test_three_splits_provided(mol_data):
 def test_seed0(mol_data):
     """
     Testing that make_split_indices can get expected output using astartes as backend for random split with seed 0.
-    Note: the behaviour of randomness for data splitting is not controlled by chemprop but by the chosen backend.
+    Note: the behaviour of randomness for data splitting is not controlled here but by the chosen backend.
     """
     train, val, test = make_split_indices(mols=mol_data, seed=0)
     train_astartes, val_astartes, test_astartes = _unpack_astartes_result(
@@ -60,7 +60,7 @@ def test_seed0(mol_data):
 def test_seed100(mol_data):
     """
     Testing that make_split_indices can get expected output using astartes as backend for random split with seed 100.
-    Note: the behaviour of randomness for data splitting is not controlled by chemprop but by the chosen backend.
+    Note: the behaviour of randomness for data splitting is not controlled here but by the chosen backend.
     """
     train, val, test = make_split_indices(mols=mol_data, seed=100)
     train_astartes, val_astartes, test_astartes = _unpack_astartes_result(

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# This script iterates through all Chemprop Docker image versions, runs pip freeze in each,
-# and saves the output to a file named after the version.
+# This script iterates through all tagged upstream Docker image versions, runs
+# pip freeze in each, and saves the output to a file named after the version.
 
 # Check for required tools
 command -v docker >/dev/null 2>&1 || { echo "Error: Docker is not installed."; exit 1; }
@@ -9,7 +9,11 @@ command -v curl >/dev/null 2>&1 || { echo "Error: curl is not installed."; exit 
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is not installed."; exit 1; }
 
 # Docker Hub repository
-REPO="chemprop/chemprop"
+REPO="${UPSTREAM_REPO:-}"
+if [ -z "$REPO" ]; then
+    echo "Error: set UPSTREAM_REPO to the upstream Docker Hub repository (for example owner/name)."
+    exit 1
+fi
 
 # Docker Hub API URL for tags
 API_URL="https://hub.docker.com/v2/repositories/${REPO}/tags?page_size=100"
