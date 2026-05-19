@@ -1,0 +1,11 @@
+{
+  "predictions_csv": "scripts/scripts_training/outputs_hpc/default_hparam_matrices/matrix1/mixture_combination/gnn/dcn_mix_exp/dcn_mix_exp/mixture_combination/fold_04/predictions.csv",
+  "excess_analysis_csv": "scripts/scripts_training/outputs_hpc/default_hparam_matrices/matrix1/mixture_combination/gnn/dcn_mix_exp/dcn_mix_exp/mixture_combination/fold_04/excess_analysis.csv",
+  "n_test_rows": 96,
+  "absolute_kendall_model_vs_true": 0.7844839005124481,
+  "n_rows_with_reference_ideal": 53,
+  "absolute_kendall_ideal_vs_true": 0.6822429776691662,
+  "absolute_kendall_model_vs_ideal": 0.7750362844702469,
+  "n_rows_with_reference_excess": 53,
+  "excess_kendall_model_vs_reference": 0.39042089985486217
+}
